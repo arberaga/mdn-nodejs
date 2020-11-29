@@ -2,6 +2,8 @@ var Book = require('../models/book');
 var async = require('async');
 const validator = require('express-validator');
 var Genre = require('../models/genre');
+const { body, validationResult} = require('express-validator/check')
+const { sanitizeBody} = require('express-validator/filter');
 
 // Display list of all Genre.
 exports.genre_list = function(req, res) {
@@ -149,22 +151,64 @@ exports.genre_delete_post = function(req, res, next) {
 };
 
 // Display Genre update form on GET.
-exports.genre_update_get = function(req, res, next) {
-
-  Genre.find('genre')
+exports.genre_update_get = function(req, res, next) {  
+  Genre.findById(req.params.id)
   .exec(function(err, results){
+    
     if (err) { return next(err); }
-    if (results.book==null) { // No results.
-        var err = new Error('Book not found');
+    if (results==null) { // No results.
+        var err = new Error('Genre not found');
         err.status = 404;
         return next(err);
     }
-    res.render('genre_form',{title:'Update genre', genres:results})
+    res.render('genre_form',{title:'Update genre', genre:results})
   })
   
 };
 
 // Handle Genre update on POST.
-exports.genre_update_post = function(req, res) {
-    res.send('NOT IMPLEMENTED: Genre update POST');
-};
+exports.genre_update_post = [
+  (req,res,next) => {
+    
+    if(!(req.body.name instanceof Array)){
+      if(typeof req.body.name === 'undefined')
+      req.body.name = [];
+      else 
+      req.body.name = new Array(req.body.name);
+    }
+    next();
+  },
+  body('name','Genre name must not be empty').trim().isLength({ min:1 }),
+  sanitizeBody('name').escape(),
+
+  (req,res,next) => {
+    // Extract the validation errors from a request.
+    const errors = validationResult(req);
+    var genre = new Genre({
+      name: req.body.name,
+      _id: req.params.id//This is required, or a new ID will be assigned!
+    });
+    if(!errors.isEmpty()){
+      Genre.findById(req.params.id)
+      .exec(function(err, results){
+        
+        if (err) { return next(err); }
+        if (results==null) { // No results.
+            var err = new Error('Genre not found');
+            err.status = 404;
+            return next(err);
+        }
+        res.render('genre_form',{title:'Update genre', genres:results})
+      })
+    }
+    else{
+      Genre.findByIdAndUpdate(req.params.id,genre,{},function(err,thegenre){
+        if(err){return next(err);}
+        //Successful - redirect to book detail page.
+        res.redirect(thegenre.url)
+      })
+    }
+  }
+]
+
+
